@@ -1,0 +1,60 @@
+<html>
+<header>
+
+</header>
+
+<body>
+    <table>
+        <tr>
+            <th>hostname</th>
+            <th>filename</th>
+            <th>lines</th>
+            <th>Action</th>
+        </tr>
+        <tr>
+
+            <td><input type="text" id="hostname" value="localhost:8081"></td>
+            <td><input type="text" id="filename" value="testfile.txt"></td>
+            <td><input type="text" id="lines" value="10"></td>
+            <td><input type="button" id="tailbtn" onclick="tail()" value="Tail!"></td>
+        </tr>
+    </table>
+
+    <pre id="filedata">File data will appear here</pre>
+
+    <script>
+        let alreadyopen = false;
+        let lastconn = null
+        function tail() {
+            let hostname = document.getElementById("hostname")
+            let filename = document.getElementById("filename")
+            let lines = document.getElementById("lines")
+            let tailbtn = document.getElementById("tailbtn")
+            var connection = new WebSocket("ws://" + hostname.value)
+
+            // When the connection is open, send some data to the server
+            connection.onopen = function () {
+                if (!alreadyopen) {
+                    alreadyopen = true;
+                } else {
+                    lastconn.close()
+                }
+                lastconn = connection
+                // connection.send("Ping") // Send the message "Ping" to the server
+                document.getElementById("filedata").innerHTML = ""
+                connection.send("INIT " + filename.value + " " + lines.value)
+            }
+
+            // Log errors
+            connection.onerror = function (error) {
+                console.log("WebSocket Error " + error)
+            }
+
+            // Log messages from the server
+            connection.onmessage = function (e) {
+                document.getElementById("filedata").innerHTML += e.data
+                window.scrollTo(0, document.body.scrollHeight);
+            }
+        }
+    </script>
+</body>
