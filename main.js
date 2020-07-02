@@ -17,8 +17,6 @@ wss.on("connection", function connection(ws) {
             if (connections[ws.id]) {
                 connections[ws.id].fileName = messages[1]
                 connections[ws.id].totalLines = messages[2] ? +messages[2] : 10
-
-                // const getLastPosition = await Tail.getFileStartPointBackwards(connections[ws.id].fileName, connections[ws.id].totalLines)
                 const size = await Tail.readAndSendFirstNLines(connections[ws.id])
                 connections[ws.id].lastPosition = size
                 const ret = await Tail.readAndSend(connections[ws.id])

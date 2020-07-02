@@ -1,35 +1,38 @@
 const { promises: fsPromisified } = require("fs");
 const fs = require("fs");
 
-
 async function readAndSendFirstNLines(connection) {
     let file
     try {
         file = await fsPromisified.open(connection.fileName)
     }
     catch (err) {
-        return { position: 0, lineEnd: "" }
+        return 0
     }
     const stat = await file.stat()
     const size = stat.size
     if (size === 0) {
-        return { position: 0, lineEnd: "" }
+        return 0
     }
     const chunkSize = Math.min(200 * 10, size)
     let buffer = Buffer.alloc ? Buffer.alloc(chunkSize) : new Buffer(chunkSize)
     let oldPosition = size
     let totalLineEnds = []
     let linesRead = connection.linesToRead
-    let linesToSend = ""
+    let linesToSend = []
     while (oldPosition > 0) {
         let position = Math.max(0, oldPosition - chunkSize)
         await file.read(buffer, 0, chunkSize, position)
         oldPosition = position
         const singleline = buffer.toString("utf-8")
-        linesToSend += singleline
+        linesToSend = linesToSend.concat(singleline.split("\n"))
         let lines = singleline.split("\n")
         totalLineEnds = lines.concat(totalLineEnds)
         linesRead -= lines.length
+        if (linesToSend.length > connection.linesToRead) {
+            linesToSend = linesToSend.splice(linesToSend.length-connection.linesToRead, connection.linesToRead)
+            break;
+        }
         if (linesRead <= 0) {
             for (let i = 0; i < Math.abs(linesRead); i++) {
                 oldPosition += Buffer.from(totalLineEnds[i]).length + 1
@@ -38,7 +41,7 @@ async function readAndSendFirstNLines(connection) {
         }
     }
     await file.close()
-    connection.ws.send(linesToSend)
+    connection.ws.send(linesToSend.join("\n"))
     return size
 }
 
