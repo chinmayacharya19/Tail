@@ -26,11 +26,11 @@
         let alreadyopen = false;
         let lastconn = null
         function tail() {
-            let hostname = document.getElementById("hostname")
-            let filename = document.getElementById("filename")
-            let lines = document.getElementById("lines")
-            let tailbtn = document.getElementById("tailbtn")
-            var connection = new WebSocket("ws://" + hostname.value)
+            const hostname = document.getElementById("hostname")
+            const filename = document.getElementById("filename")
+            const lines = document.getElementById("lines")
+            const tailbtn = document.getElementById("tailbtn")
+            const connection = new WebSocket("ws://" + hostname.value)
 
             // When the connection is open, send some data to the server
             connection.onopen = function () {

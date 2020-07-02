@@ -11,6 +11,10 @@ module.exports = {
         "ecmaVersion": 11
     },
     "rules": {
+        "prefer-const": ["error", {
+            "destructuring": "any",
+            "ignoreReadBeforeAssign": false
+        }],
         "indent": [
             "error",
             4

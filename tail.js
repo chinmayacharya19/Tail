@@ -1,25 +1,35 @@
-const fs = require("fs")
+const { promises: fsPromisified } = require("fs");
+const fs = require("fs");
 
-function getFileStartPointBackwards(filename, linesToRead) {
-    let file = fs.openSync(filename)
-    let size = fs.fstatSync(file).size
+
+async function readAndSendFirstNLines(connection) {
+    let file
+    try {
+        file = await fsPromisified.open(connection.fileName)
+    }
+    catch (err) {
+        return { position: 0, lineEnd: "" }
+    }
+    const stat = await file.stat()
+    const size = stat.size
     if (size === 0) {
         return { position: 0, lineEnd: "" }
     }
-    let chunkSize = Math.min(1024 * 1024, size)
+    const chunkSize = Math.min(200 * 10, size)
     let buffer = Buffer.alloc ? Buffer.alloc(chunkSize) : new Buffer(chunkSize)
     let oldPosition = size
     let totalLineEnds = []
-    let lineEnd = "CRLF"
-    let linesRead = linesToRead
+    let linesRead = connection.linesToRead
+    let linesToSend = ""
     while (oldPosition > 0) {
         let position = Math.max(0, oldPosition - chunkSize)
-        fs.readSync(file, buffer, 0, chunkSize, position)
+        await file.read(buffer, 0, chunkSize, position)
         oldPosition = position
-        let lineEndIndexes = buffer.toString("utf-8").split("\n")
-        //Reversing an array
-        totalLineEnds = lineEndIndexes.concat(totalLineEnds)
-        linesRead -= totalLineEnds.length
+        const singleline = buffer.toString("utf-8")
+        linesToSend += singleline
+        let lines = singleline.split("\n")
+        totalLineEnds = lines.concat(totalLineEnds)
+        linesRead -= lines.length
         if (linesRead <= 0) {
             for (let i = 0; i < Math.abs(linesRead); i++) {
                 oldPosition += Buffer.from(totalLineEnds[i]).length + 1
@@ -27,39 +37,60 @@ function getFileStartPointBackwards(filename, linesToRead) {
             break
         }
     }
-    fs.closeSync(file)
-    return { position: oldPosition, lineEnd: lineEnd, linesRead }
+    await file.close()
+    connection.ws.send(linesToSend)
+    return size
 }
 
-function readFile(fd, position, chunkSize) {
+
+async function readFile(file, position, chunkSize) {
     let buffer = Buffer.alloc ? Buffer.alloc(chunkSize) : new Buffer(chunkSize)
-    fs.readSync(fd, buffer, 0, chunkSize, position)
+    await file.read(buffer, 0, chunkSize, position)
     return buffer
 }
 
-function readAndSend(connection) {
-    let file = fs.openSync(connection.fileName)
-    let size = fs.fstatSync(file).size
+async function readAndSend(connection) {
+    let file
+    try {
+        file = await fsPromisified.open(connection.fileName)
+    }
+    catch (err) {
+        if (err.code === "ENOENT") {
+            connection.ws.send(connection.fileName + " File not found")
+            return false
+        }
+        connection.ws.send("Something is not wrong, check backend console")
+        console.log(err)
+        return false
+    }
+    const stat = await file.stat()
+    const size = stat.size
     let from = connection.lastPosition
-    let chunkSize = Math.min(1024 * 1024, Math.max(size - from, 0))
+    let chunkSize = Math.min(200 * 10, Math.max(size - from, 0))
     let totalDataToSend = size - from
     while (size && totalDataToSend > 0) {
-        let data = readFile(file, from, chunkSize)
+        let data = await readFile(file, from, chunkSize)
         totalDataToSend -= chunkSize
         connection.ws.send(data.toString("utf-8"))
     }
     if (size != 0) {
         connection.lastPosition = size
     }
-    fs.closeSync(file)
+    await file.close()
+    return true
 }
 
 function watchFile(connection) {
-    fs.watch(connection.fileName, (event) => {
+    var lock = false
+    fs.watch(connection.fileName, async (event) => {
         if (event === "change") {
-            readAndSend(connection)
+            if (!lock) {
+                lock = true
+                await readAndSend(connection)
+                setTimeout(() => lock = false, 500)
+            }
         }
     })
 }
 
-module.exports = { getFileStartPointBackwards, watchFile, readAndSend }
+module.exports = { watchFile, readAndSend, readAndSendFirstNLines }

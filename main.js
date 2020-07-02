@@ -2,43 +2,37 @@ const WebSocket = require("ws")
 const fs = require("fs")
 const Tail = require("./tail")
 const { uuid } = require("uuidv4")
-let http = require("http")
+const http = require("http")
 
 const wss = new WebSocket.Server({ port: 8081 })
 
-let connections = []
+let connections = {}
 
 wss.on("connection", function connection(ws) {
     ws.id = uuid()
-    connections.push({ ws, totalLines: 0, fileName: "", lastPosition: 0 })
-    ws.on("message", function incoming(message) {
+    connections[ws.id] = { ws, totalLines: 0, fileName: "", lastPosition: 0 }
+    ws.on("message", async function incoming(message) {
         let messages = message.split(" ")
         if (messages[0] === "INIT") {
-            let index = -1
-            for (let con in connections) {
-                if (connections[con].ws.id === ws.id) {
-                    index = con
-                    connections[con].fileName = messages[1]
-                    connections[con].totalLines = messages[2] ? +messages[2] : 10
+            if (connections[ws.id]) {
+                connections[ws.id].fileName = messages[1]
+                connections[ws.id].totalLines = messages[2] ? +messages[2] : 10
+
+                // const getLastPosition = await Tail.getFileStartPointBackwards(connections[ws.id].fileName, connections[ws.id].totalLines)
+                const size = await Tail.readAndSendFirstNLines(connections[ws.id])
+                connections[ws.id].lastPosition = size
+                const ret = await Tail.readAndSend(connections[ws.id])
+                if (ret) {
+                    Tail.watchFile(connections[ws.id])
                 }
-            }
-            if (index !== -1) {
-                let getLastPosition = Tail.getFileStartPointBackwards(connections[index].fileName, connections[index].totalLines)
-                connections[index].lastPosition = getLastPosition.position
-                Tail.readAndSend(connections[index])
-                Tail.watchFile(connections[index])
             }
         }
     })
 
     ws.on("close", () => {
-        let i = 0
-        for (let con in connections) {
-            if (connections[con].ws.id === ws.id) {
-                i = con
-            }
+        if (connections[ws.id]) {
+            delete connections[ws.id]
         }
-        connections.splice(i, 1)
         console.log("Closed")
     })
 })
