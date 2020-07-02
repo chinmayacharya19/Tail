@@ -6,13 +6,13 @@ const http = require("http")
 
 const wss = new WebSocket.Server({ port: 8081 })
 
-let connections = {}
+const connections = {}
 
 wss.on("connection", function connection(ws) {
     ws.id = uuid()
     connections[ws.id] = { ws, totalLines: 0, fileName: "", lastPosition: 0 }
     ws.on("message", async function incoming(message) {
-        let messages = message.split(" ")
+        const messages = message.split(" ")
         if (messages[0] === "INIT") {
             if (connections[ws.id]) {
                 connections[ws.id].fileName = messages[1]

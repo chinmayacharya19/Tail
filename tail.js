@@ -1,5 +1,7 @@
-const { promises: fsPromisified } = require("fs");
-const fs = require("fs");
+const { promises: fsPromisified } = require("fs")
+const fs = require("fs")
+
+const OS_SAVE_TIME = 500
 
 async function readAndSendFirstNLines(connection) {
     let file
@@ -15,23 +17,25 @@ async function readAndSendFirstNLines(connection) {
         return 0
     }
     const chunkSize = Math.min(200 * 10, size)
-    let buffer = Buffer.alloc ? Buffer.alloc(chunkSize) : new Buffer(chunkSize)
+    const buffer = Buffer.alloc ? Buffer.alloc(chunkSize) : new Buffer(chunkSize)
     let oldPosition = size
     let totalLineEnds = []
-    let linesRead = connection.linesToRead
+    let linesRead = connection.totalLines
     let linesToSend = []
     while (oldPosition > 0) {
-        let position = Math.max(0, oldPosition - chunkSize)
+        const position = Math.max(0, oldPosition - chunkSize)
         await file.read(buffer, 0, chunkSize, position)
         oldPosition = position
         const singleline = buffer.toString("utf-8")
-        linesToSend = linesToSend.concat(singleline.split("\n"))
-        let lines = singleline.split("\n")
+        const lines = singleline.split("\n")
+        oldPosition += Buffer.from(lines[0]).length 
+        lines.shift()
+        linesToSend = lines.concat(linesToSend)
         totalLineEnds = lines.concat(totalLineEnds)
         linesRead -= lines.length
-        if (linesToSend.length > connection.linesToRead) {
-            linesToSend = linesToSend.splice(linesToSend.length-connection.linesToRead, connection.linesToRead)
-            break;
+        if (linesToSend.length > connection.totalLines) {
+            linesToSend = linesToSend.splice(linesToSend.length - connection.totalLines, connection.totalLines)
+            break
         }
         if (linesRead <= 0) {
             for (let i = 0; i < Math.abs(linesRead); i++) {
@@ -47,10 +51,11 @@ async function readAndSendFirstNLines(connection) {
 
 
 async function readFile(file, position, chunkSize) {
-    let buffer = Buffer.alloc ? Buffer.alloc(chunkSize) : new Buffer(chunkSize)
+    const buffer = Buffer.alloc ? Buffer.alloc(chunkSize) : new Buffer(chunkSize)
     await file.read(buffer, 0, chunkSize, position)
     return buffer
 }
+
 
 async function readAndSend(connection) {
     let file
@@ -66,13 +71,13 @@ async function readAndSend(connection) {
         console.log(err)
         return false
     }
-    const stat = await file.stat()
+    const stat = await fs.fstatSync(file.fd)
     const size = stat.size
-    let from = connection.lastPosition
-    let chunkSize = Math.min(200 * 10, Math.max(size - from, 0))
+    const from = connection.lastPosition
+    const chunkSize = Math.min(200 * 10, Math.max(size - from, 0))
     let totalDataToSend = size - from
     while (size && totalDataToSend > 0) {
-        let data = await readFile(file, from, chunkSize)
+        const data = await readFile(file, from, chunkSize)
         totalDataToSend -= chunkSize
         connection.ws.send(data.toString("utf-8"))
     }
@@ -89,8 +94,10 @@ function watchFile(connection) {
         if (event === "change") {
             if (!lock) {
                 lock = true
-                await readAndSend(connection)
-                setTimeout(() => lock = false, 500)
+                setTimeout(async () => {
+                    lock = false
+                    await readAndSend(connection)
+                }, OS_SAVE_TIME)
             }
         }
     })
