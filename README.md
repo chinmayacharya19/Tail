@@ -1,6 +1,6 @@
 ##   Tail Your Files Like a Pro with Node.js (Tail) 
 
-This repository provides a Node.js implementation of the classic `tail` command, staying true to its original name: **Tail**. 
+This repository provides a Node.js implementation of the classic `tail` command with `websockets` layer on top of it, staying true to its original name: **Tail**. 
 
 **What is Tail?**
 
@@ -30,7 +30,7 @@ Tail empowers you to effectively monitor the contents of a file in real-time, ju
 3. **Run Tail:**
 
    ```bash
-   node tail.js <filename> [options]
+   node main.js <filename> [options]
    ```
 
    - `<filename>`: Replace this with the path to the file you want to monitor.
